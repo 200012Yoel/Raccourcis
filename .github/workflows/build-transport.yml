@@ -29,7 +29,11 @@ jobs:
         run: python -m pip install "shortcutkit==0.8.1"
 
       - name: Créer le fichier Shortcuts (non signé)
-        run: python build_transport.py dist/Transport.unsigned.shortcut
+        run: |
+          python build_transport.py dist/Transport.unsigned.shortcut > build-output.log 2>&1 || {
+            echo "ECHEC DE GENERATION" >> build-output.log
+            exit 1
+          }
 
       - name: Vérifier la structure du fichier
         run: |
@@ -57,7 +61,11 @@ jobs:
           PY
 
       - name: Signer à distance (Shortcuty puis HubSign)
-        run: python sign_remote.py dist/Transport.unsigned.shortcut dist/Transport.shortcut
+        run: |
+          python sign_remote.py dist/Transport.unsigned.shortcut dist/Transport.shortcut > sign-output.log 2>&1 || {
+            echo "ECHEC DE SIGNATURE" >> sign-output.log
+            exit 1
+          }
 
       - name: Vérifier le fichier signé
         run: |
@@ -94,3 +102,22 @@ jobs:
         run: |
           echo "Fichier signé disponible après publication :"
           echo "https://raw.githubusercontent.com/200012Yoel/Raccourcis/main/dist/Transport.shortcut"
+
+      - name: Enregistrer les diagnostics pour ChatGPT
+        if: always()
+        run: |
+          {
+            echo "GitHub run id: ${{ github.run_id }}"
+            echo "Date UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "== build =="
+            if test -f build-output.log; then cat build-output.log; else echo "pas de log de build"; fi
+            echo "== signature =="
+            if test -f sign-output.log; then cat sign-output.log; else echo "pas de log de signature"; fi
+            echo "== files =="
+            ls -la dist 2>&1 || true
+          } > diagnostic-build.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f diagnostic-build.txt
+          git commit -m "Journal compilation Transport [skip ci]" || true
+          git push origin HEAD:main || true
