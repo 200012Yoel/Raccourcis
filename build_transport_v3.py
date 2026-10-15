@@ -171,17 +171,8 @@ no_stop_data = s.if_(ref(line_stops), "has_no_value")
 stop("Impossible de récupérer les arrêts de cette ligne.")
 s.end_if(no_stop_data)
 
-how = s.choose_from_menu("Quel arrêt veux-tu consulter ?", [
-    "Dire ou saisir un arrêt", "Arrêt proche de ma position"])
-s.menu_item(how, "Dire ou saisir un arrêt")
-station = ask("À quel arrêt ? Exemples : Mairie du 20e, Gambetta, Gare de Lyon.")
+station = ask("Quel arrêt de la ligne ? Exemples : Mairie du 20e, Gambetta, Gare de Lyon.")
 setvar("StopQuery", station)
-s.menu_item(how, "Arrêt proche de ma position")
-# Ne devine pas le nom de l'arrêt à partir d'une rue :
-# la saisie courte est plus fiable en version vocale.
-near = ask("Dis le nom de l'arrêt proche de toi.")
-setvar("StopQuery", near)
-s.end_menu(how)
 
 keys = match_stops(variable("StopQuery"), ref(line_stops))
 none_match = s.if_(ref(keys), "has_no_value")
