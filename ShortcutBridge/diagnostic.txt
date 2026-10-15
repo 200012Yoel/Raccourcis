@@ -1,7 +1,0 @@
-Build: 38765585996
-UTC: 2026-10-15T16:03:13Z
-Result: success
-Dernières lignes du build:
-/Users/runner/work/Raccourcis/Raccourcis/ShortcutBridge/Sources/HomeView.swift:6:56: warning: conformance of 'PhoneLocation' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-** BUILD SUCCEEDED **
