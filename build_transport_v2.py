@@ -121,7 +121,7 @@ speak("Quel arrêt ou quelle station de la ligne ", variable("LineCode"),
       " veux-tu consulter ?")
 stop_choice = s.choose_from_menu("Comment trouver l'arrêt ?", ["Dire le nom de l'arrêt", "Près de moi"])
 s.menu_item(stop_choice, "Dire le nom de l'arrêt")
-name_response = ask("Nom de la station ou de l'arrêt. Par exemple Botzaris.")
+name_response = ask("Quel arrêt ou quelle station de cette ligne ?")
 safe_station = encoded(ref(name_response))
 search_url = text(ROOT, "/places?q=", ref(safe_station),
                   "&count=30&type%5B%5D=stop_area")
@@ -165,7 +165,7 @@ safe_stop = encoded(ref(station_id))
 # E. Navitia /stop_schedules regroupe les horaires PAR DIRECTION (route).
 # Filtrage serveur par vraie ligne + arrêt => pas de mélanges d'autres lignes.
 schedule_url = text(ROOT, "/lines/", ref(safe_line), "/stop_areas/",
-                    ref(safe_stop), "/stop_schedules?count=2&data_freshness=realtime")
+                    ref(safe_stop), "/stop_schedules?count=2")
 sched_reply = fetch(schedule_url)
 schedules = dct(ref(sched_reply), "stop_schedules")
 not_available = s.if_(ref(schedules), "has_no_value")
@@ -197,10 +197,12 @@ minutes = a("gettimebetweendates", WFTimeUntilFromDate=current_date(),
 rounded = a("round", WFInput=ref(minutes), WFRoundTo="Ones Place",
             WFRoundMode="Always Round Up")
 spoken = t("Passage dans environ ", ref(rounded), " minutes, à ", ref(spoken_hour))
+setvar("SpokenTime", spoken)
 s.otherwise(can_count)
 spoken = t("Passage annoncé à ", ref(spoken_hour))
+setvar("SpokenTime", spoken)
 s.end_if(can_count)
-speak(ref(spoken))
+speak(variable("SpokenTime"))
 s.end_repeat_each(each_time)
 s.end_if(has_dates)
 s.end_repeat_each(each_direction)
