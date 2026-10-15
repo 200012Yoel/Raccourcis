@@ -46,6 +46,7 @@ struct HomeView: View {
     @State private var importedFileName = ""
     @State private var importedActions: [String] = []
     @State private var importMessage = ""
+    @State private var readyToPaste = false
 
     private let modes = ["Métro", "Tram", "Bus", "Bus de banlieue", "RER", "Transilien"]
 
@@ -125,20 +126,34 @@ struct HomeView: View {
                     }
                 }
 
-                Section("4. Voir un .shortcut (même non signé)") {
-                    Text("Ce lecteur affiche les actions de ton fichier Transport, sans les installer ni contourner la signature Apple.")
+                Section("4. Coller tous les blocs dans Raccourcis") {
+                    Text("Importe ton .shortcut NON SIGNÉ : l’application va copier tous ses blocs dans le presse-papiers Apple, sans signer ni installer le fichier.")
                         .font(.footnote)
-                    Button("Choisir un fichier .shortcut") { importFile = true }
+                    Button {
+                        importFile = true
+                    } label: {
+                        Label("Choisir le fichier .shortcut", systemImage: "doc.badge.plus")
+                    }
                     if !importedFileName.isEmpty {
                         Text(importedFileName).font(.headline)
-                        Text("\(importedActions.count) actions").foregroundStyle(.secondary)
-                        ForEach(Array(importedActions.enumerated()), id: \.offset) { number, name in
-                            Text("\(number + 1). \(name)")
-                                .font(.caption.monospaced())
+                        Text("\(importedActions.count) blocs détectés")
+                            .foregroundStyle(.secondary)
+                    }
+                    if readyToPaste {
+                        Label("\(importedActions.count) blocs copiés dans le presse-papiers !", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Button {
+                            guard let url = URL(string: "shortcuts://create-shortcut") else { return }
+                            UIApplication.shared.open(url)
+                        } label: {
+                            Label("Ouvrir un nouveau raccourci", systemImage: "arrow.up.right.square")
                         }
+                        Text("Dans Raccourcis : ajoute d'abord une action « Commentaire », touche son icône, puis choisis « Coller en dessous ». Les blocs copiés doivent apparaître d'un coup. Si Coller n'apparaît pas, iOS a peut-être changé son format de presse-papiers.")
+                            .font(.footnote)
                     }
                     if !importMessage.isEmpty {
-                        Text(importMessage).foregroundStyle(.secondary)
+                        Text(importMessage).font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -155,24 +170,20 @@ struct HomeView: View {
                     let security = url.startAccessingSecurityScopedResource()
                     defer { if security { url.stopAccessingSecurityScopedResource() } }
                     let bytes = try Data(contentsOf: url)
-                    if bytes.starts(with: Data("AEA1".utf8)) {
-                        importedFileName = url.lastPathComponent
-                        importedActions = []
-                        importMessage = "Fichier signé Apple (AEA1) : cet aperçu ne décode pas son enveloppe. Le fichier non signé est lisible ici."
-                        return
-                    }
-                    guard let plist = try PropertyListSerialization.propertyList(from: bytes, format: nil) as? [String: Any],
-                          let actions = plist["WFWorkflowActions"] as? [[String: Any]] else {
-                        throw IDFMError.badData
-                    }
+                    let actions = try ShortcutClipboardBridge.actions(from: bytes)
+                    let count = try ShortcutClipboardBridge.copyAllActions(from: bytes)
                     importedFileName = url.lastPathComponent
-                    importedActions = actions.map { entry in
-                        (entry["WFWorkflowActionIdentifier"] as? String ?? "Action inconnue")
+                    importedActions = actions.map {
+                        ($0["WFWorkflowActionIdentifier"] as? String ?? "Action inconnue")
                             .replacingOccurrences(of: "is.workflow.actions.", with: "")
                     }
-                    importMessage = "Lecture réussie : aperçu des actions uniquement."
+                    readyToPaste = true
+                    importMessage = "\(count) blocs copiés. Aucun serveur, aucune signature nécessaire pour cette opération."
                 } catch {
-                    importMessage = "Impossible d'ouvrir le fichier : \(error.localizedDescription)"
+                    readyToPaste = false
+                    importedFileName = ""
+                    importedActions = []
+                    importMessage = "La copie a échoué : \(error.localizedDescription)"
                 }
             }
             .onReceive(location.$coordinate) { coordinate in
