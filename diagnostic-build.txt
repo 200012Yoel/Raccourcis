@@ -1,0 +1,19 @@
+GitHub run id: 38759343013
+Date UTC: 2026-10-15T15:20:02Z
+== build ==
+Fichier non signé : dist/Transport.unsigned.shortcut (131 actions)
+== signature ==
+Échec signature via Shortcuty: HTTPError: HTTP Error 502: Bad Gateway
+Échec signature via HubSign: TypeError: unsupported type: <class 'NoneType'>
+Traceback (most recent call last):
+  File "/Users/runner/work/Raccourcis/Raccourcis/sign_remote.py", line 84, in <module>
+    main()
+  File "/Users/runner/work/Raccourcis/Raccourcis/sign_remote.py", line 80, in main
+    raise RuntimeError("Aucun service distant n'a signé le fichier : " + "; ".join(failures))
+RuntimeError: Aucun service distant n'a signé le fichier : Shortcuty: HTTPError: HTTP Error 502: Bad Gateway; HubSign: TypeError: unsupported type: <class 'NoneType'>
+ECHEC DE SIGNATURE
+== files ==
+total 40
+drwxr-xr-x   3 runner  staff     96 Oct 15 15:20 .
+drwxr-xr-x  11 runner  staff    352 Oct 15 15:20 ..
+-rw-r--r--   1 runner  staff  19040 Oct 15 15:20 Transport.unsigned.shortcut
