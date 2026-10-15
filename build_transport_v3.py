@@ -79,7 +79,7 @@ def match_stops(query, stops):
     each = s.repeat_each(stops)
     name = dct(repeat_item(), "name")
     identifier = dct(repeat_item(), "id")
-    hit = act("text.match", WFMatchTextPattern=ref(pattern), WFInput=ref(name))
+    hit = act("text.match", WFMatchTextPattern=ref(pattern), text=ref(name))
     cond = s.if_(ref(hit), "has_any_value")
     new_map = set_dictionary_item("FoundStopMap", ref(name), ref(identifier))
     setvar("FoundStopMap", new_map)
