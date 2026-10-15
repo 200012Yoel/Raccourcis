@@ -278,10 +278,12 @@ minutes = act("gettimebetweendates", WFTimeUntilFromDate=current_date(),
 rounded = act("round", WFInput=ref(minutes), WFRoundTo="Ones Place",
               WFRoundMode="Always Round Up")
 item = value("Passage dans environ ", ref(rounded), " minutes, à ", ref(time_clean), ".")
+setvar("LineOfResult", item)
 s.otherwise(valid_date)
 item = value("Passage prévu à ", ref(time_clean), ".")
+setvar("LineOfResult", item)
 s.end_if(valid_date)
-act("appendvariable", WFVariableName="Results", WFInput=ref(item))
+act("appendvariable", WFVariableName="Results", WFInput=variable("LineOfResult"))
 s.end_repeat_each(each_date)
 s.end_if(available)
 s.end_repeat_each(each_schedule)
