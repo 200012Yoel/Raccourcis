@@ -49,8 +49,8 @@ def fetch(url):
     }
     return a("downloadurl", WFURL=url, WFHTTPMethod="GET", WFHTTPHeaders=headers)
 
-def die(message):
-    speak(message)
+def die(*message):
+    speak(*message)
     a("exit")
 
 # A. Clé PRIM : saisie au premier démarrage, test avant mémorisation.
