@@ -10,17 +10,19 @@ Ce dépôt fabrique un raccourci iPhone **Transport** sans jailbreak ni Apple In
 - Saisie de la ligne, puis choix entre **Arrêts autour de moi (GPS)** et **Rechercher un arrêt par son nom**.
 - Sélection de l'arrêt et affichage des prochains passages, de leur direction et de l'heure/minutes avant départ quand calculables.
 
-## Génération GitHub Actions
+## Génération automatique + signature distante
 
-Ouvrir **Actions > Build Transport Shortcut > Run workflow** puis récupérer l'artefact **Transport-unsigned**. Le fichier généré est **non signé**, car le service Apple de signature de raccourcis nécessite une session iCloud, absente des Mac temporaires de GitHub Actions. Nous ne prétendons pas que ce fichier est installable directement.
+Le workflow GitHub **Build Transport Shortcut** crée le fichier avec `shortcutkit`, le valide, puis essaie de le signer via les services tiers Shortcuty Signing API (principal) et HubSign de RoutineHub (secours). Le Mac de GitHub **n'est pas connecté à un compte Apple**, donc cette signature ne passe pas par la commande Apple native.
 
-Sur un Mac personnel connecté à iCloud, la commande officielle est :
+Quand l'exécution a **réussi**, elle publie `dist/Transport.shortcut` dans la branche main. Depuis Safari sur l'iPhone, le lien direct est :
 
-    shortcuts sign --mode anyone --input "Transport.unsigned.shortcut" --output "Transport.shortcut"
+**[Transport.shortcut (uniquement après réussite du workflow)](https://raw.githubusercontent.com/200012Yoel/Raccourcis/main/dist/Transport.shortcut)**
 
-Ouvrir ensuite le fichier signé sur l'iPhone et confirmer l'ajout dans Raccourcis.
+En fonction de Safari, le fichier peut d'abord se télécharger dans Fichiers ; ouvrir ensuite ce fichier pour voir l'écran d'importation Raccourcis. La confirmation d'ajout reste nécessaire.
 
-Ce projet utilise ShortcutKit (MIT) : https://github.com/frontboat/shortcutkit
+Si le lien renvoie **404**, cela signifie que le fichier signé n'a pas été publié : ouvrir [le workflow](https://github.com/200012Yoel/Raccourcis/actions/workflows/build-transport.yml), le lancer, examiner le résultat et, si nécessaire, activer GitHub Actions / les autorisations d'écriture du jeton. Une compilation ou un envoi à un service de signature réussi **ne garantit pas à lui seul** que toutes les actions fonctionnent sur iPhone.
+
+La clé API PRIM n'est jamais mise dans GitHub ni transmise au service de signature : elle est demandée **à l'exécution**, sur l'iPhone. Le service de signature tiers voit le contenu du raccourci public, pas la clé que tu ajouteras sur ton téléphone.
 
 ## À connaître avant d'utiliser
 
