@@ -1,217 +1,214 @@
 #!/usr/bin/env python3
-"""Transport V2 : Siri vocal + recherche de ligne précise Navitia.
-
-Génère un .shortcut non signé (à copier/coller avec Shortcut Bridge).
-La clé PRIM reste locale à l'iPhone et n'est jamais incluse dans ce programme.
+"""Transport V2 - assistant vocal Siri pour les passages IDFM.
+Génère un .shortcut non signé, à coller via Shortcut Bridge.
+Ne contient AUCUNE clé API personnelle.
 """
 from pathlib import Path
 import sys
-
 from shortcutkit import Shortcut, ref, variable, text, repeat_item, current_date
 
 ROOT = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia"
 s = Shortcut("Transport", color="Blue")
 
-def action(name, **params):
-    return s.action("is.workflow.actions." + name, **params)
+def a(name, **kw):
+    return s.action("is.workflow.actions." + name, **kw)
 
 def speak(*parts):
-    return action("speaktext", WFText=text(*parts),
-                  WFSpeakTextWait=True, WFSpeakTextRate=0.52,
-                  WFSpeakTextPitch=1.0, WFSpeakTextLanguage="fr-FR")
+    return a("speaktext", WFText=text(*parts), WFSpeakTextWait=True,
+             WFSpeakTextRate=0.50, WFSpeakTextPitch=1.0,
+             WFSpeakTextLanguage="fr-FR")
 
-def show(*parts):
-    return action("showresult", Text=text(*parts))
+def ask(question):
+    return a("ask", WFInputType="Text", WFAskActionPrompt=question)
 
-def ask_input(question):
-    # Le dialogue Siri peut récupérer la réponse à la voix.
-    return action("ask", WFInputType="Text", WFAskActionPrompt=question)
+def t(*parts):
+    return a("gettext", WFTextActionText=text(*parts))
 
-def store(name, result):
-    action("setvariable", WFInput=ref(result), WFVariableName=name)
+def setvar(name, result):
+    a("setvariable", WFVariableName=name, WFInput=ref(result))
 
-def datum(value, key):
-    return action("getvalueforkey", WFInput=value,
-                  WFGetDictionaryValueType="Value", WFDictionaryKey=key)
+def dct(obj, key):
+    return a("getvalueforkey", WFInput=obj,
+             WFGetDictionaryValueType="Value", WFDictionaryKey=key)
 
-def raw(*parts):
-    return action("gettext", WFTextActionText=text(*parts))
+def encoded(inp):
+    return a("urlencode", WFEncodeMode="Encode", WFInput=inp)
 
-def encode(value):
-    return action("urlencode", WFEncodeMode="Encode", WFInput=value)
-
-def replace(value, find, to):
-    return action("text.replace", WFInput=value,
-                  WFReplaceTextFind=find, WFReplaceTextReplace=to,
-                  WFReplaceTextRegularExpression=True)
+def substitution(inp, find, repl):
+    return a("text.replace", WFInput=inp,
+             WFReplaceTextFind=find, WFReplaceTextReplace=repl,
+             WFReplaceTextRegularExpression=True)
 
 def fetch(url):
-    # La connexion PRIM est directe depuis l'iPhone.
-    api_headers = {
+    headers = {
         "WFSerializationType": "WFDictionaryFieldValue",
         "Value": {"WFDictionaryFieldValueItems": [
             {"WFItemType": 0, "WFKey": "apikey", "WFValue": text(variable("IDFMKey"))},
-            {"WFItemType": 0, "WFKey": "Accept", "WFValue": "application/json"}
-        ]}
+            {"WFItemType": 0, "WFKey": "Accept", "WFValue": "application/json"},
+        ]},
     }
-    return action("downloadurl", WFURL=url, WFHTTPMethod="GET",
-                  WFHTTPHeaders=api_headers)
+    return a("downloadurl", WFURL=url, WFHTTPMethod="GET", WFHTTPHeaders=headers)
 
-def stop(message):
+def die(message):
     speak(message)
-    action("exit")
+    a("exit")
 
-# 1. Accueil et authentification locale
-speak("Bonjour ! Bienvenue dans Transport. Je vais rechercher tes prochains passages.")
-key = action("getstoredcontent", WFStoredContentKey="IDFM_PRIM_KEY",
-             WFStoredContentGlobalValue=False)
-missing = s.if_(ref(key), "has_no_value")
-speak("Pour commencer, colle ta clé API Île-de-France Mobilités. Elle restera sur ton iPhone.")
-entered = ask_input("Clé API PRIM")
-store("IDFMKey", entered)
-probe = fetch(ROOT + "/places?q=Gare%20de%20Lyon&count=1")
-places = datum(ref(probe), "places")
-validated = s.if_(ref(places), "has_no_value")
-stop("La clé API n'a pas été validée. Vérifie-la puis relance le raccourci.")
-s.end_if(validated)
-action("setstoredcontent", WFStoredContentKey="IDFM_PRIM_KEY",
-       WFInput=variable("IDFMKey"), WFStoredContentGlobalValue=False)
-speak("Clé enregistrée. Merci !")
-s.otherwise(missing)
-store("IDFMKey", key)
-s.end_if(missing)
+# A. Clé PRIM : saisie au premier démarrage, test avant mémorisation.
+key = a("getstoredcontent", WFStoredContentKey="IDFM_PRIM_KEY", WFStoredContentGlobalValue=False)
+setup = s.if_(ref(key), "has_no_value")
+speak("Bienvenue dans Transport. Entre ta clé API PRIM pour la première utilisation.")
+newkey = ask("Colle ta clé API Île-de-France Mobilités")
+setvar("IDFMKey", newkey)
+health = fetch(ROOT + "/places?q=Gare%20de%20Lyon&count=1")
+health_places = dct(ref(health), "places")
+invalid = s.if_(ref(health_places), "has_no_value")
+die("Je ne peux pas valider cette clé. Vérifie la connexion et réessaie.")
+s.end_if(invalid)
+a("setstoredcontent", WFStoredContentKey="IDFM_PRIM_KEY",
+  WFInput=variable("IDFMKey"), WFStoredContentGlobalValue=False)
+speak("Clé enregistrée. Tu n'auras plus à la saisir.")
+s.otherwise(setup)
+setvar("IDFMKey", key)
+s.end_if(setup)
 
-# 2. Mode de transport précis
-speak("Quel transport veux-tu ? Métro, tramway, bus, bus de banlieue, RER ou Transilien ?")
+# B. Type de transport + question adaptée, exemples réellement spécifiques.
+speak("Quel transport veux-tu prendre ? Métro, tramway, bus, bus de banlieue, RER ou Transilien ?")
 modes = [
-    ("Métro", "Metro"),
-    ("Tramway", "Tramway"),
-    ("Bus de Paris", "Bus"),
-    ("Bus de banlieue", "Bus"),
-    ("RER", "RapidTransit"),
-    ("Transilien", "LocalTrain"),
+    ("Métro", "Metro", "Quelle ligne de métro ? Par exemple 1, 6 ou 11."),
+    ("Tramway", "Tramway", "Quelle ligne de tramway ? Par exemple T 1, T 2 ou T 3 b."),
+    ("Bus de Paris", "Bus", "Quelle ligne de bus ? Par exemple 20, 26, 48 ou 60."),
+    ("Bus de banlieue", "Bus", "Quelle ligne de bus de banlieue ? Donne son numéro ou son nom."),
+    ("RER", "RapidTransit", "Quelle ligne de RER ? Par exemple A, B, C, D ou E."),
+    ("Transilien", "LocalTrain", "Quelle ligne de Transilien ? Par exemple H, J, L, N, P ou R."),
 ]
-mode_menu = s.choose_from_menu("Choisis le transport", [title for title, _ in modes])
-for title, physical_mode in modes:
-    s.menu_item(mode_menu, title)
-    mode_name = raw(title)
-    mode_key = raw(physical_mode)
-    store("ModeName", mode_name)
-    store("ModeKey", mode_key)
-s.end_menu(mode_menu)
+menu = s.choose_from_menu("Quel moyen de transport ?", [m[0] for m in modes])
+for title, physical, question in modes:
+    s.menu_item(menu, title)
+    spoken_mode = t(title)
+    code_mode = t(physical)
+    setvar("ModeName", spoken_mode)
+    setvar("ModeKey", code_mode)
+    speak(question)
+    answer = ask(question)
+    setvar("LineCode", answer)
+s.end_menu(menu)
 
-speak("Quelle ligne veux-tu rechercher ? Tu peux dire A pour le RER A, ou 20 pour le bus 20.")
-code = ask_input("Numéro ou lettre de ligne : A, B, 20, H...")
-store("LineCode", code)
-code_url = encode(ref(code))
+# C. Rechercher la vraie ligne par mode et code. Choisir en cas d'homonymie.
+safe_code = encoded(variable("LineCode"))
+line_url = text(ROOT, "/physical_modes/physical_mode%3A", variable("ModeKey"),
+                "/lines?filter=line.code%3D", ref(safe_code), "&count=40")
+line_reply = fetch(line_url)
+lines = dct(ref(line_reply), "lines")
+no_lines = s.if_(ref(lines), "has_no_value")
+die("Aucune ligne ne correspond au transport et au numéro indiqués. Essaie un autre numéro.")
+s.end_if(no_lines)
 
-# 3. Chercher la véritable ligne par code ET par mode physique :
-#    interdire de confondre un bus 20 avec un autre bus portant le code 20.
-lines_url = text(ROOT, "/physical_modes/physical_mode%3A", variable("ModeKey"),
-                 "/lines?filter=line.code%3D", ref(code_url), "&count=40")
-response = fetch(lines_url)
-lines = datum(ref(response), "lines")
-missing_lines = s.if_(ref(lines), "has_no_value")
-stop("Aucune ligne correspondante trouvée. Vérifie le type de transport et le numéro de ligne.")
-s.end_if(missing_lines)
+each_line = s.repeat_each(ref(lines))
+name = dct(repeat_item(), "name")
+code = dct(repeat_item(), "code")
+identifier = dct(repeat_item(), "id")
+item = t(ref(code), " — ", ref(name), "  •  ", ref(identifier))
+a("appendvariable", WFVariableName="LineChoices", WFInput=ref(item))
+s.end_repeat_each(each_line)
 
-# Chaque ligne candidate est identifiée par son véritable URI Navitia,
-# sélectionnée sans aucune condition Si 'est [variable]' qui casse à l'import.
-each = s.repeat_each(ref(lines))
-line_name = datum(repeat_item(), "name")
-line_code = datum(repeat_item(), "code")
-line_id = datum(repeat_item(), "id")
-label = raw(ref(line_code), " | ", ref(line_name), "  •  ", ref(line_id))
-action("appendvariable", WFVariableName="LineOptions", WFInput=ref(label))
-s.end_repeat_each(each)
+selected_line = a("choosefromlist", WFInput=variable("LineChoices"),
+                  WFChooseFromListActionPrompt="Confirme ta ligne")
+line_id = substitution(ref(selected_line), "^.*  •  ", "")
+safe_line = encoded(ref(line_id))
 
-speak("J'ai trouvé la ligne. S'il y a plusieurs résultats, choisis celui qui correspond à ton trajet.")
-picked_line = action("choosefromlist", WFInput=variable("LineOptions"),
-                     WFChooseFromListActionPrompt="Choisis la bonne ligne")
-# Exemple du choix : A | RER A • line:IDFM:Cxxxxx
-id_only = replace(ref(picked_line), "^.*  •  ", "")
-store("LineID", id_only)
-encoded_line_id = encode(ref(id_only))
+# D. Demander l'arrêt APRÈS la ligne.
+speak("Quel arrêt ou quelle station de la ligne ", variable("LineCode"),
+      " veux-tu consulter ?")
+stop_choice = s.choose_from_menu("Comment trouver l'arrêt ?", ["Dire le nom de l'arrêt", "Près de moi"])
+s.menu_item(stop_choice, "Dire le nom de l'arrêt")
+name_response = ask("Nom de la station ou de l'arrêt. Par exemple Botzaris.")
+safe_station = encoded(ref(name_response))
+search_url = text(ROOT, "/places?q=", ref(safe_station),
+                  "&count=30&type%5B%5D=stop_area")
+places = fetch(search_url)
+found_places = dct(ref(places), "places")
+setvar("CandidateStops", found_places)
 
-# 4. Sélection d'un arrêt, soit localisé, soit dicté à Siri.
-stop_menu = s.choose_from_menu("Comment chercher l'arrêt ?", ["Près de moi", "Dire le nom de l'arrêt"])
+s.menu_item(stop_choice, "Près de moi")
+speak("Je recherche les arrêts proches de toi.")
+position = a("getcurrentlocation")
+setvar("DeviceLocation", position)
+a("getvariable", WFVariable=variable("DeviceLocation"))
+latitude = a("properties.locations", WFContentItemPropertyName="Latitude")
+a("getvariable", WFVariable=variable("DeviceLocation"))
+longitude = a("properties.locations", WFContentItemPropertyName="Longitude")
+near_url = text(ROOT, "/coords/", ref(longitude), ";", ref(latitude),
+                "/places_nearby?distance=1000&count=30&type%5B%5D=stop_area")
+near_reply = fetch(near_url)
+close_stops = dct(ref(near_reply), "places_nearby")
+setvar("CandidateStops", close_stops)
+s.end_menu(stop_choice)
 
-s.menu_item(stop_menu, "Près de moi")
-speak("Je cherche les arrêts à proximité de ta position.")
-position = action("getcurrentlocation")
-lat = action("properties.locations", WFContentItemPropertyName="Latitude")
-action("getvariable", WFVariable=ref(position))
-lon = action("properties.locations", WFContentItemPropertyName="Longitude")
-near_url = text(ROOT, "/coords/", ref(lon), ";", ref(lat),
-                "/places_nearby?distance=950&count=30&type%5B%5D=stop_area")
-near_data = fetch(near_url)
-near_places = datum(ref(near_data), "places_nearby")
-store("Stops", near_places)
+not_found = s.if_(variable("CandidateStops"), "has_no_value")
+die("Je ne trouve pas cet arrêt. Essaie de prononcer son nom autrement.")
+s.end_if(not_found)
 
-s.menu_item(stop_menu, "Dire le nom de l'arrêt")
-speak("Comment s'appelle ton arrêt ou ta gare ?")
-stop_input = ask_input("Nom exact de l'arrêt ou de la gare")
-safe_name = encode(ref(stop_input))
-search_url = text(ROOT, "/places?q=", ref(safe_name), "&count=30&type%5B%5D=stop_area")
-search = fetch(search_url)
-search_places = datum(ref(search), "places")
-store("Stops", search_places)
-s.end_menu(stop_menu)
+# Le même nom peut exister pour plusieurs arrêts. Proposer de vrais identifiants.
+each_stop = s.repeat_each(variable("CandidateStops"))
+stop_area = dct(repeat_item(), "stop_area")
+stopname = dct(ref(stop_area), "name")
+stopid = dct(ref(stop_area), "id")
+label = t(ref(stopname), "  •  ", ref(stopid))
+a("appendvariable", WFVariableName="StopChoices", WFInput=ref(label))
+s.end_repeat_each(each_stop)
 
-none_found = s.if_(variable("Stops"), "has_no_value")
-stop("Je n'ai trouvé aucun arrêt. Essaie avec un nom plus précis.")
-s.end_if(none_found)
+stop_selected = a("choosefromlist", WFInput=variable("StopChoices"),
+                  WFChooseFromListActionPrompt="Choisis ton arrêt sur cette ligne")
+station_id = substitution(ref(stop_selected), "^.*  •  ", "")
+safe_stop = encoded(ref(station_id))
 
-each = s.repeat_each(variable("Stops"))
-# Objet places avec stop_area imbriqué; même forme pour places_nearby.
-area = datum(repeat_item(), "stop_area")
-area_name = datum(ref(area), "name")
-area_id = datum(ref(area), "id")
-stop_label = raw(ref(area_name), "  •  ", ref(area_id))
-action("appendvariable", WFVariableName="StopOptions", WFInput=ref(stop_label))
-s.end_repeat_each(each)
+# E. Navitia /stop_schedules regroupe les horaires PAR DIRECTION (route).
+# Filtrage serveur par vraie ligne + arrêt => pas de mélanges d'autres lignes.
+schedule_url = text(ROOT, "/lines/", ref(safe_line), "/stop_areas/",
+                    ref(safe_stop), "/stop_schedules?count=2&data_freshness=realtime")
+sched_reply = fetch(schedule_url)
+schedules = dct(ref(sched_reply), "stop_schedules")
+not_available = s.if_(ref(schedules), "has_no_value")
+die("Aucun horaire n'est disponible pour cette ligne à cet arrêt. "
+    "Essaie un autre arrêt de la ligne.")
+s.end_if(not_available)
 
-speak("J'ai trouvé plusieurs arrêts possibles. Choisis celui que tu souhaites.")
-choice = action("choosefromlist", WFInput=variable("StopOptions"),
-                WFChooseFromListActionPrompt="Choisis l'arrêt")
-stop_id = replace(ref(choice), "^.*  •  ", "")
-encoded_stop_id = encode(ref(stop_id))
-
-# 5. Intersection serveur ligne + arrêt : aucun filtrage client fragile.
-depart_url = text(ROOT, "/stop_areas/", ref(encoded_stop_id),
-                  "/lines/", ref(encoded_line_id), "/departures?count=5")
-response = fetch(depart_url)
-departures = datum(ref(response), "departures")
-no_dep = s.if_(ref(departures), "has_no_value")
-stop("Aucun passage annoncé pour cette ligne à cet arrêt. Essaie un autre arrêt ou une autre direction.")
-s.end_if(no_dep)
-
-speak("Voici les prochains passages de la ligne ", variable("LineCode"), ".")
-each = s.repeat_each(ref(departures))
-direction = datum(repeat_item(), "display_informations.direction")
-departure = datum(repeat_item(), "stop_date_time.departure_date_time")
-formatted = replace(ref(departure),
-                    r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$",
-                    "$4 heures $5")
-human_date = replace(ref(departure),
+speak("Voici les prochains passages de la ligne ", variable("LineCode"),
+      " à ton arrêt, dans chaque direction disponible.")
+each_direction = s.repeat_each(ref(schedules))
+display = dct(repeat_item(), "display_informations")
+direction_name = dct(ref(display), "direction")
+dates = dct(repeat_item(), "date_times")
+has_dates = s.if_(ref(dates), "has_any_value")
+speak("Direction ", ref(direction_name), ".")
+each_time = s.repeat_each(ref(dates))
+raw_time = dct(repeat_item(), "date_time")
+freshness = dct(repeat_item(), "data_freshness")
+spoken_hour = substitution(ref(raw_time),
+                           r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$",
+                           "$4 heures $5")
+human = substitution(ref(raw_time),
                      r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$",
                      "$1-$2-$3 $4:$5:$6")
-as_date = action("detect.date", WFInput=ref(human_date))
-have_date = s.if_(ref(as_date), "has_any_value")
-mins = action("gettimebetweendates", WFTimeUntilFromDate=current_date(),
-              WFInput=ref(as_date), WFTimeUntilUnit="Minutes")
-rounded = action("round", WFInput=ref(mins), WFRoundTo="Ones Place", WFRoundMode="Always Round Up")
-speak("Direction ", ref(direction), ", dans environ ", ref(rounded),
-      " minutes. Départ à ", ref(formatted), ".")
-s.otherwise(have_date)
-speak("Direction ", ref(direction), ", départ prévu à ", ref(formatted), ".")
-s.end_if(have_date)
-s.end_repeat_each(each)
-
-speak("Attention, les horaires peuvent être théoriques. Bonne route !")
+parsed = a("detect.date", WFInput=ref(human))
+can_count = s.if_(ref(parsed), "has_any_value")
+minutes = a("gettimebetweendates", WFTimeUntilFromDate=current_date(),
+            WFInput=ref(parsed), WFTimeUntilUnit="Minutes")
+rounded = a("round", WFInput=ref(minutes), WFRoundTo="Ones Place",
+            WFRoundMode="Always Round Up")
+spoken = t("Passage dans environ ", ref(rounded), " minutes, à ", ref(spoken_hour))
+s.otherwise(can_count)
+spoken = t("Passage annoncé à ", ref(spoken_hour))
+s.end_if(can_count)
+speak(ref(spoken))
+s.end_repeat_each(each_time)
+s.end_if(has_dates)
+s.end_repeat_each(each_direction)
+speak("Voilà les horaires disponibles. Selon la ligne, ils peuvent être théoriques, "
+      "et non une position en direct. Bonne route !")
 
 if __name__ == "__main__":
-    output = Path(sys.argv[1] if len(sys.argv) > 1 else "Transport-V2.unsigned.shortcut")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    s.write(output)
-    print(f"Transport V2 : {len(s.actions)} actions dans {output}")
+    out = Path(sys.argv[1] if len(sys.argv) > 1 else "Transport-V2.unsigned.shortcut")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    s.write(out)
+    print("Transport V2", len(s.actions), "actions ->", out)
