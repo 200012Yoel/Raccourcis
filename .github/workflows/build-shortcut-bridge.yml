@@ -5,11 +5,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'ShortcutBridge/**'
+      - 'ShortcutBridge/Sources/**'
+      - 'ShortcutBridge/project.yml'
       - '.github/workflows/build-shortcut-bridge.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   compile:
@@ -18,7 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Installer XcodeGen
-        run: brew install xcodegen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
       - name: Générer le projet iOS
         working-directory: ShortcutBridge
         run: xcodegen generate
@@ -58,3 +60,24 @@ jobs:
           path: ShortcutBridge/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Publier un résumé des erreurs dans le dépôt
+        if: always()
+        working-directory: ShortcutBridge
+        run: |
+          {
+            echo "Build: ${{ github.run_id }}"
+            echo "UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Result: ${{ job.status }}"
+            echo "Dernières lignes du build:"
+            if test -f xcodebuild.log; then
+              grep -E "(error:|warning:|BUILD SUCCEEDED|BUILD FAILED)" xcodebuild.log | tail -80 || true
+            else
+              echo "Le compilateur n’a pas encore créé de journal. Échec possible XcodeGen."
+            fi
+          } > diagnostic.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostic.txt
+          git commit -m "Diagnostic build Shortcut Bridge [skip ci]" || true
+          git push origin HEAD:main || true
