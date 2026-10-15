@@ -60,6 +60,14 @@ jobs:
           print("Structure valide :", len(actions), "actions.")
           PY
 
+      - name: Archiver le raccourci non signé
+        uses: actions/upload-artifact@v4
+        with:
+          name: Transport-version-build
+          path: dist/Transport.unsigned.shortcut
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Signer à distance (Shortcuty puis HubSign)
         run: |
           python sign_remote.py dist/Transport.unsigned.shortcut dist/Transport.shortcut > sign-output.log 2>&1 || {
