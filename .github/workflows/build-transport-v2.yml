@@ -1,0 +1,86 @@
+name: Build Transport V2 Siri
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "build_transport_v2.py"
+      - ".github/workflows/build-transport-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 18
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer le générateur
+        run: python -m pip install "shortcutkit==0.8.1"
+      - name: Générer Transport V2 (non signé)
+        run: |
+          python build_transport_v2.py dist/Transport-V2.unsigned.shortcut > build-v2.log 2>&1 || {
+            cat build-v2.log
+            exit 1
+          }
+          cat build-v2.log
+      - name: Vérifier les actions du raccourci
+        run: |
+          python - <<'PY'
+          import plistlib
+          from pathlib import Path
+          p = plistlib.loads(Path("dist/Transport-V2.unsigned.shortcut").read_bytes())
+          ids = [a["WFWorkflowActionIdentifier"] for a in p["WFWorkflowActions"]]
+          assert len(ids) > 70, len(ids)
+          assert ids.count("is.workflow.actions.speaktext") >= 12
+          assert "is.workflow.actions.getstoredcontent" in ids
+          assert "is.workflow.actions.setstoredcontent" in ids
+          assert ids.count("is.workflow.actions.choosefrommenu") >= 2
+          assert ids.count("is.workflow.actions.choosefromlist") >= 2
+          assert "is.workflow.actions.downloadurl" in ids
+          conditions = [a["WFWorkflowActionParameters"] for a in p["WFWorkflowActions"]
+                        if a["WFWorkflowActionIdentifier"] == "is.workflow.actions.conditional"]
+          # Aucune condition "est" à compléter à la main à l'import.
+          assert all(q.get("WFCondition") not in (4, 5) for q in conditions)
+          text_all = str(p)
+          for term in ("Botzaris", "Métro", "RER", "Transilien", "Bus", "stop_schedules", "direction"):
+            assert term in text_all, term
+          print("OK", len(ids), "actions, dont", ids.count("is.workflow.actions.speaktext"), "annonces vocales")
+          PY
+      - name: Mettre l'artefact téléchargeable à disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: Transport-V2-non-signe
+          path: dist/Transport-V2.unsigned.shortcut
+          retention-days: 20
+      - name: Publier le fichier non signé dans GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/Transport-V2.unsigned.shortcut
+          git diff --cached --quiet || git commit -m "Transport V2: générer raccourci Siri [skip ci]"
+          git push origin HEAD:main
+      - name: Publier le diagnostic
+        if: always()
+        run: |
+          {
+            echo "Run: ${{ github.run_id }}"
+            echo "Status: ${{ job.status }}"
+            echo "Date UTC: $(date -u +%FT%TZ)"
+            echo "===== résultat génération ====="
+            if test -f build-v2.log; then tail -80 build-v2.log; else echo "non disponible"; fi
+            echo "===== fichier ====="
+            ls -lh dist/Transport-V2.unsigned.shortcut || true
+          } > diagnostic-transport-v2.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f diagnostic-transport-v2.txt
+          git diff --cached --quiet || git commit -m "Diagnostic Transport V2 [skip ci]"
+          git push origin HEAD:main || true
