@@ -1,7 +1,7 @@
-Run: 38774947869
-Status: failure
-Date UTC: 2026-10-15T17:09:35Z
+Run: 38775167414
+Status: success
+Date UTC: 2026-10-15T17:11:13Z
 ===== résultat génération =====
 Transport V2 151 actions -> dist/Transport-V2.unsigned.shortcut
 ===== fichier =====
--rw-r--r--  1 runner  staff    22K Oct 15 17:09 dist/Transport-V2.unsigned.shortcut
+-rw-r--r--  1 runner  staff    22K Oct 15 17:11 dist/Transport-V2.unsigned.shortcut
