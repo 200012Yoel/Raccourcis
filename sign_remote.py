@@ -10,6 +10,7 @@ import mimetypes
 import pathlib
 import plistlib
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -41,8 +42,17 @@ def shortcuty(source):
     )
 
 
+def scrub_nones(value):
+    # Binary plist handles None, XML plist does not. Remove unsupported plist nulls.
+    if isinstance(value, dict):
+        return {k: scrub_nones(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [scrub_nones(v) for v in value if v is not None]
+    return value
+
+
 def hubsign(source):
-    workflow = plistlib.loads(source.read_bytes())
+    workflow = scrub_nones(plistlib.loads(source.read_bytes()))
     xml = plistlib.dumps(workflow, fmt=plistlib.FMT_XML).decode("utf-8")
     payload = json.dumps({"shortcutName": "Transport", "shortcut": xml}).encode()
     return request(
@@ -65,8 +75,16 @@ def main():
     if not workflow.get("WFWorkflowActions"):
         raise ValueError("Fichier sans actions de raccourci")
     failures = []
-    for label, signer in [("Shortcuty", shortcuty), ("HubSign", hubsign)]:
+    attempts = [
+        ("Shortcuty #1", shortcuty, 0),
+        ("Shortcuty #2", shortcuty, 5),
+        ("Shortcuty #3", shortcuty, 10),
+        ("HubSign", hubsign, 0),
+    ]
+    for label, signer, pause in attempts:
         try:
+            if pause:
+                time.sleep(pause)
             signed = signer(source)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(signed)
