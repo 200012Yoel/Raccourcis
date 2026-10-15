@@ -289,7 +289,7 @@ s.end_if(available)
 s.end_repeat_each(each_schedule)
 
 have_passages = s.if_(variable("Results"), "has_any_value")
-joined = act("text.combine", WFInput=variable("Results"),
+joined = act("text.combine", text=variable("Results"),
              WFTextSeparator="New Lines")
 result(variable("TextResult"), "\n", ref(joined),
        "\nLes horaires peuvent être théoriques et non en temps réel.")
