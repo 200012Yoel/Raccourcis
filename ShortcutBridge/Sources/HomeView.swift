@@ -47,6 +47,8 @@ struct HomeView: View {
     @State private var importedActions: [String] = []
     @State private var importMessage = ""
     @State private var readyToPaste = false
+    @State private var showPasteInstructions = false
+    @State private var importedShortcutData: Data?
 
     private let modes = ["Métro", "Tram", "Bus", "Bus de banlieue", "RER", "Transilien"]
 
@@ -67,16 +69,27 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                     }
                     if readyToPaste {
-                        Label("\(importedActions.count) blocs copiés dans le presse-papiers !", systemImage: "checkmark.circle.fill")
+                        Label("\(importedActions.count) blocs préparés pour le collage", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                         Button {
-                            guard let url = URL(string: "shortcuts://create-shortcut") else { return }
-                            UIApplication.shared.open(url)
+                            guard let source = importedShortcutData else { return }
+                            do {
+                                let number = try ShortcutClipboardBridge.copyAllActions(from: source)
+                                importMessage = "\(number) blocs recopiés dans le presse-papiers."
+                            } catch {
+                                importMessage = "Échec de copie : \(error.localizedDescription)"
+                            }
                         } label: {
-                            Label("Ouvrir un nouveau raccourci", systemImage: "arrow.up.right.square")
+                            Label("Recopier les blocs", systemImage: "doc.on.clipboard")
                         }
-                        Text("Dans Raccourcis : ajoute d'abord une action « Commentaire », touche son icône, puis choisis « Coller en dessous ». Les blocs copiés doivent apparaître d'un coup. Si Coller n'apparaît pas, iOS a peut-être changé son format de presse-papiers.")
+                        Button {
+                            showPasteInstructions = true
+                        } label: {
+                            Label("Ouvrir Raccourcis pour coller manuellement", systemImage: "arrow.up.right.square")
+                        }
+                        Text("Important : ce bouton ouvre un éditeur VIDE. iOS ne nous permet pas de remplir automatiquement l'éditeur. Pour voir les blocs, il faut encore les coller depuis le menu d'une action.")
                             .font(.footnote)
+                            .foregroundStyle(.orange)
                     }
                     if !importMessage.isEmpty {
                         Text(importMessage).font(.footnote)
@@ -164,6 +177,15 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("Shortcut Bridge")
+            .alert("Le collage reste manuel", isPresented: $showPasteInstructions) {
+                Button("Ouvrir l'éditeur") {
+                    guard let url = URL(string: "shortcuts://create-shortcut") else { return }
+                    UIApplication.shared.open(url)
+                }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Dans le nouveau raccourci : ajoute une action « Commentaire », touche l'icône de cette action puis « Coller en dessous ». Les blocs ont été copiés par Shortcut Bridge, mais Apple ne permet pas à notre application d'appuyer sur Coller à ta place.")
+            }
             .fileImporter(isPresented: $importFile,
                           allowedContentTypes: [UTType(filenameExtension: "shortcut") ?? .data]) { result in
                 do {
@@ -178,10 +200,12 @@ struct HomeView: View {
                         ($0["WFWorkflowActionIdentifier"] as? String ?? "Action inconnue")
                             .replacingOccurrences(of: "is.workflow.actions.", with: "")
                     }
+                    importedShortcutData = bytes
                     readyToPaste = true
                     importMessage = "\(count) blocs copiés. Aucun serveur, aucune signature nécessaire pour cette opération."
                 } catch {
                     readyToPaste = false
+                    importedShortcutData = nil
                     importedFileName = ""
                     importedActions = []
                     importMessage = "La copie a échoué : \(error.localizedDescription)"
