@@ -47,6 +47,23 @@ enum ShortcutClipboardBridge {
         return result
     }
 
+    /// Les sorties produites par certains générateurs possèdent des valeurs nulles
+    /// qui ne sont pas sérialisables par PropertyListSerialization iOS.
+    private static func cleaned(_ value: Any) -> Any? {
+        if value is NSNull { return nil }
+        if let dictionary = value as? [String: Any] {
+            var result: [String: Any] = [:]
+            for (key, object) in dictionary {
+                if let valid = cleaned(object) { result[key] = valid }
+            }
+            return result
+        }
+        if let array = value as? [Any] {
+            return array.compactMap { cleaned($0) }
+        }
+        return value
+    }
+
     /// Une action = un élément UIPasteboard sous le type privé mais documenté
     /// publiquement par la communauté « com.apple.shortcuts.action ».
     /// Copier les dictionnaires complets permet de conserver les UUID,
@@ -56,7 +73,7 @@ enum ShortcutClipboardBridge {
         let actions = try actions(from: data)
         let items: [[String: Any]] = try actions.map { action in
             let bytes = try PropertyListSerialization.data(
-                fromPropertyList: action, format: .binary, options: 0
+                fromPropertyList: cleaned(action) ?? [:], format: .binary, options: 0
             )
             return [pasteboardType: bytes]
         }
