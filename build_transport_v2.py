@@ -123,10 +123,12 @@ stop_choice = s.choose_from_menu("Comment trouver l'arrêt ?", ["Dire le nom de 
 s.menu_item(stop_choice, "Dire le nom de l'arrêt")
 name_response = ask("Quel arrêt ou quelle station de cette ligne ?")
 safe_station = encoded(ref(name_response))
-search_url = text(ROOT, "/places?q=", ref(safe_station),
-                  "&count=30&type%5B%5D=stop_area")
+# Recherche LIMITÉE AUX ARRÊTS DE LA LIGNE, pas à tous les arrêts d'Île-de-France.
+search_url = text(ROOT, "/lines/", ref(safe_line),
+                  "/pt_objects?q=", ref(safe_station),
+                  "&type%5B%5D=stop_area")
 places = fetch(search_url)
-found_places = dct(ref(places), "places")
+found_places = dct(ref(places), "pt_objects")
 setvar("CandidateStops", found_places)
 
 s.menu_item(stop_choice, "Près de moi")
@@ -148,42 +150,104 @@ not_found = s.if_(variable("CandidateStops"), "has_no_value")
 die("Je ne trouve pas cet arrêt. Essaie de prononcer son nom autrement.")
 s.end_if(not_found)
 
-# Le même nom peut exister pour plusieurs arrêts. Proposer de vrais identifiants.
+# Les choix de stations sont présentés SANS identifiants techniques.
+# Un dictionnaire {nom affiché: URI Navitia} masque les codes IDFM.
+blank_stops = t("{}")
+stop_dictionary = a("detect.dictionary", WFInput=ref(blank_stops))
+setvar("StopMap", stop_dictionary)
+
 each_stop = s.repeat_each(variable("CandidateStops"))
 stop_area = dct(repeat_item(), "stop_area")
 stopname = dct(ref(stop_area), "name")
 stopid = dct(ref(stop_area), "id")
-label = t(ref(stopname), "  •  ", ref(stopid))
-a("appendvariable", WFVariableName="StopChoices", WFInput=ref(label))
+updated_stops = a("setvalueforkey", WFDictionaryKey=ref(stopname),
+                  WFDictionaryValue=ref(stopid),
+                  WFDictionary=variable("StopMap"))
+setvar("StopMap", updated_stops)
 s.end_repeat_each(each_stop)
 
-stop_selected = a("choosefromlist", WFInput=variable("StopChoices"),
-                  WFChooseFromListActionPrompt="Choisis ton arrêt sur cette ligne")
-station_id = substitution(ref(stop_selected), "^.*  •  ", "")
+stop_names = a("getvalueforkey", WFGetDictionaryValueType="All Keys",
+               WFInput=variable("StopMap"))
+missing_choices = s.if_(ref(stop_names), "has_no_value")
+die("Je ne trouve pas de station qui correspond à la ligne demandée.")
+s.end_if(missing_choices)
+
+count_stops = a("count", Input=ref(stop_names), WFCountType="Items")
+multiple_stops = s.if_(ref(count_stops), "greater_than", 1)
+speak("Voici les arrêts possibles pour cette ligne. Choisis celui que tu veux.")
+stop_selected = a("choosefromlist", WFInput=ref(stop_names),
+                  WFChooseFromListActionPrompt="Choisis ton arrêt")
+setvar("SelectedStopName", stop_selected)
+s.otherwise(multiple_stops)
+single_stop = a("getitemfromlist", WFInput=ref(stop_names), WFItemSpecifier="First Item")
+setvar("SelectedStopName", single_stop)
+s.end_if(multiple_stops)
+station_id = dct(variable("StopMap"), variable("SelectedStopName"))
 safe_stop = encoded(ref(station_id))
 
-# E. Navitia /stop_schedules regroupe les horaires PAR DIRECTION (route).
-# Filtrage serveur par vraie ligne + arrêt => pas de mélanges d'autres lignes.
+# Récupérer les départs de CETTE LIGNE à CET ARRÊT.
+# Navitia renvoie un stop_schedule par point d'arrêt et par route/direction.
 schedule_url = text(ROOT, "/lines/", ref(safe_line), "/stop_areas/",
-                    ref(safe_stop), "/stop_schedules?count=2")
+                    ref(safe_stop), "/stop_schedules?count=50&items_per_schedule=2")
 sched_reply = fetch(schedule_url)
 schedules = dct(ref(sched_reply), "stop_schedules")
 not_available = s.if_(ref(schedules), "has_no_value")
-die("Aucun horaire n'est disponible pour cette ligne à cet arrêt. "
-    "Essaie un autre arrêt de la ligne.")
+die("Pas d'horaire disponible pour la ligne ", variable("LineCode"),
+    " à l'arrêt choisi. Vérifie le nom ou essaie une autre station.")
 s.end_if(not_available)
 
-speak("Voici les prochains passages de la ligne ", variable("LineCode"),
-      " à ton arrêt, dans chaque direction disponible.")
-each_direction = s.repeat_each(ref(schedules))
-display = dct(repeat_item(), "display_informations")
-direction_name = dct(ref(display), "direction")
-dates = dct(repeat_item(), "date_times")
-has_dates = s.if_(ref(dates), "has_any_value")
-speak("Direction ", ref(direction_name), ".")
-each_time = s.repeat_each(ref(dates))
+# Préparer le dictionnaire des directions réelles : {Direction affichée: route.id}.
+# Les clés d'un dictionnaire sont uniques, donc pas de doublons dans le menu.
+blank_directions = t("{}")
+directions_dictionary = a("detect.dictionary", WFInput=ref(blank_directions))
+setvar("DirectionMap", directions_dictionary)
+each_route = s.repeat_each(ref(schedules))
+infos = dct(repeat_item(), "display_informations")
+direction = dct(ref(infos), "direction")
+route = dct(repeat_item(), "route")
+route_id = dct(ref(route), "id")
+updated_map = a("setvalueforkey", WFDictionaryKey=ref(direction),
+                WFDictionaryValue=ref(route_id), WFDictionary=variable("DirectionMap"))
+setvar("DirectionMap", updated_map)
+s.end_repeat_each(each_route)
+
+direction_names = a("getvalueforkey", WFInput=variable("DirectionMap"),
+                    WFGetDictionaryValueType="All Keys")
+no_directions = s.if_(ref(direction_names), "has_no_value")
+die("Aucune direction n'est annoncée pour cet arrêt.")
+s.end_if(no_directions)
+
+n_directions = a("count", Input=ref(direction_names), WFCountType="Items")
+multiple_directions = s.if_(ref(n_directions), "greater_than", 1)
+speak("Dans quelle direction veux-tu voyager ? Choisis le terminus dans le menu.")
+choice = a("choosefromlist", WFInput=ref(direction_names),
+           WFChooseFromListActionPrompt="Choisis la direction du trajet")
+setvar("SelectedDirection", choice)
+s.otherwise(multiple_directions)
+only_direction = a("getitemfromlist", WFInput=ref(direction_names),
+                   WFItemSpecifier="First Item")
+setvar("SelectedDirection", only_direction)
+s.end_if(multiple_directions)
+
+selected_route_id = dct(variable("DirectionMap"), variable("SelectedDirection"))
+route_url_id = encoded(ref(selected_route_id))
+# Un nouvel appel contraint cette fois par route, station et donc direction.
+specific_url = text(ROOT, "/routes/", ref(route_url_id), "/stop_areas/",
+                    ref(safe_stop), "/stop_schedules?count=10&items_per_schedule=2")
+direction_response = fetch(specific_url)
+filtered = dct(ref(direction_response), "stop_schedules")
+no_selected = s.if_(ref(filtered), "has_no_value")
+die("Je ne trouve pas de passage pour cette direction à cet arrêt.")
+s.end_if(no_selected)
+
+speak("Pour la ligne ", variable("LineCode"),
+      ", à l'arrêt ", variable("SelectedStopName"),
+      ", direction ", variable("SelectedDirection"), ", voici les prochains passages.")
+each_selected = s.repeat_each(ref(filtered))
+times = dct(repeat_item(), "date_times")
+with_times = s.if_(ref(times), "has_any_value")
+each_time = s.repeat_each(ref(times))
 raw_time = dct(repeat_item(), "date_time")
-freshness = dct(repeat_item(), "data_freshness")
 spoken_hour = substitution(ref(raw_time),
                            r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$",
                            "$4 heures $5")
@@ -196,16 +260,16 @@ minutes = a("gettimebetweendates", WFTimeUntilFromDate=current_date(),
             WFInput=ref(parsed), WFTimeUntilUnit="Minutes")
 rounded = a("round", WFInput=ref(minutes), WFRoundTo="Ones Place",
             WFRoundMode="Always Round Up")
-spoken = t("Passage dans environ ", ref(rounded), " minutes, à ", ref(spoken_hour))
-setvar("SpokenTime", spoken)
+future = s.if_(ref(rounded), "greater_or_equal", 0)
+speak("Le prochain passage est dans ", ref(rounded),
+      " minutes, à ", ref(spoken_hour), ".")
+s.end_if(future)
 s.otherwise(can_count)
-spoken = t("Passage annoncé à ", ref(spoken_hour))
-setvar("SpokenTime", spoken)
+speak("Un passage est annoncé à ", ref(spoken_hour), ".")
 s.end_if(can_count)
-speak(variable("SpokenTime"))
 s.end_repeat_each(each_time)
-s.end_if(has_dates)
-s.end_repeat_each(each_direction)
+s.end_if(with_times)
+s.end_repeat_each(each_selected)
 speak("Voilà les horaires disponibles. Selon la ligne, ils peuvent être théoriques, "
       "et non une position en direct. Bonne route !")
 
