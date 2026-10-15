@@ -1,3 +1,0 @@
-Run: 38782006276
-Status: success
--rw-r--r--  1 runner  staff   4.7K Oct 15 18:00 dist/Test-PRIM-61.unsigned.shortcut
