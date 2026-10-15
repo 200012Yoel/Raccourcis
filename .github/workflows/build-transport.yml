@@ -6,10 +6,11 @@ on:
     branches: [main]
     paths:
       - "build_transport.py"
+      - "sign_remote.py"
       - ".github/workflows/build-transport.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -55,16 +56,41 @@ jobs:
           print("Structure valide :", len(actions), "actions.")
           PY
 
-      - name: Télécharger le raccourci non signé
+      - name: Signer à distance (Shortcuty puis HubSign)
+        run: python sign_remote.py dist/Transport.unsigned.shortcut dist/Transport.shortcut
+
+      - name: Vérifier le fichier signé
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("dist/Transport.shortcut")
+          signed = path.read_bytes()
+          assert signed.startswith(b"AEA1"), "La signature AEA1 est absente"
+          assert len(signed) > 1024, "Le fichier semble incomplet"
+          print(f"Fichier signé prêt : {path} ({len(signed)} octets)")
+          PY
+
+      - name: Conserver le fichier signé en artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Transport-unsigned
-          path: dist/Transport.unsigned.shortcut
+          name: Transport-signe
+          path: dist/Transport.shortcut
           if-no-files-found: error
           retention-days: 14
 
-      - name: Limitation de signature
+      - name: Publier le raccourci signé dans le dépôt
         run: |
-          echo "Ce raccourci est NON SIGNE."
-          echo "Un Mac personnel connecté à iCloud est nécessaire pour exécuter :"
-          echo 'shortcuts sign --mode anyone --input Transport.unsigned.shortcut --output Transport.shortcut'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/Transport.shortcut
+          if git diff --cached --quiet; then
+            echo "Même fichier, aucune publication nécessaire."
+          else
+            git commit -m "Publier Transport.shortcut signé [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Adresse du raccourci sur iPhone
+        run: |
+          echo "Fichier signé disponible après publication :"
+          echo "https://raw.githubusercontent.com/200012Yoel/Raccourcis/main/dist/Transport.shortcut"
