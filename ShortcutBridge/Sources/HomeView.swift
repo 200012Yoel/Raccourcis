@@ -53,10 +53,42 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Importer le fichier et copier ses blocs") {
+                    Text("Importe ton .shortcut NON SIGNÉ : l’application va copier tous ses blocs dans le presse-papiers Apple, sans signer ni installer le fichier.")
+                        .font(.footnote)
+                    Button {
+                        importFile = true
+                    } label: {
+                        Label("Choisir le fichier .shortcut", systemImage: "doc.badge.plus")
+                    }
+                    if !importedFileName.isEmpty {
+                        Text(importedFileName).font(.headline)
+                        Text("\(importedActions.count) blocs détectés")
+                            .foregroundStyle(.secondary)
+                    }
+                    if readyToPaste {
+                        Label("\(importedActions.count) blocs copiés dans le presse-papiers !", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Button {
+                            guard let url = URL(string: "shortcuts://create-shortcut") else { return }
+                            UIApplication.shared.open(url)
+                        } label: {
+                            Label("Ouvrir un nouveau raccourci", systemImage: "arrow.up.right.square")
+                        }
+                        Text("Dans Raccourcis : ajoute d'abord une action « Commentaire », touche son icône, puis choisis « Coller en dessous ». Les blocs copiés doivent apparaître d'un coup. Si Coller n'apparaît pas, iOS a peut-être changé son format de presse-papiers.")
+                            .font(.footnote)
+                    }
+                    if !importMessage.isEmpty {
+                        Text(importMessage).font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+
                 Section {
                     Label("Shortcut Bridge", systemImage: "arrow.triangle.branch")
                         .font(.headline)
-                    Text("Actions natives dans Raccourcis, sans jailbreak.")
+                    Text("Copie les actions d’un fichier .shortcut non signé pour les coller dans Raccourcis. Les outils Transports sont facultatifs.")
                         .foregroundStyle(.secondary)
                 }
 
@@ -123,37 +155,6 @@ struct HomeView: View {
                         if let link = URL(string: "shortcuts://") {
                             UIApplication.shared.open(link)
                         }
-                    }
-                }
-
-                Section("4. Coller tous les blocs dans Raccourcis") {
-                    Text("Importe ton .shortcut NON SIGNÉ : l’application va copier tous ses blocs dans le presse-papiers Apple, sans signer ni installer le fichier.")
-                        .font(.footnote)
-                    Button {
-                        importFile = true
-                    } label: {
-                        Label("Choisir le fichier .shortcut", systemImage: "doc.badge.plus")
-                    }
-                    if !importedFileName.isEmpty {
-                        Text(importedFileName).font(.headline)
-                        Text("\(importedActions.count) blocs détectés")
-                            .foregroundStyle(.secondary)
-                    }
-                    if readyToPaste {
-                        Label("\(importedActions.count) blocs copiés dans le presse-papiers !", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Button {
-                            guard let url = URL(string: "shortcuts://create-shortcut") else { return }
-                            UIApplication.shared.open(url)
-                        } label: {
-                            Label("Ouvrir un nouveau raccourci", systemImage: "arrow.up.right.square")
-                        }
-                        Text("Dans Raccourcis : ajoute d'abord une action « Commentaire », touche son icône, puis choisis « Coller en dessous ». Les blocs copiés doivent apparaître d'un coup. Si Coller n'apparaît pas, iOS a peut-être changé son format de presse-papiers.")
-                            .font(.footnote)
-                    }
-                    if !importMessage.isEmpty {
-                        Text(importMessage).font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
 
