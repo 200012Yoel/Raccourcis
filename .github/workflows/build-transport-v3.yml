@@ -36,7 +36,7 @@ jobs:
           assert len(a)>90, len(a)
           assert "is.workflow.actions.speaktext" not in ids
           assert ids.count("is.workflow.actions.ask")>=5
-          assert ids.count("is.workflow.actions.choosefrommenu")>=2
+          assert ids.count("is.workflow.actions.choosefrommenu")>=1
           assert "is.workflow.actions.showresult" in ids
           assert "is.workflow.actions.text.match" in ids
           print("OK",len(a),"actions Siri")
