@@ -1,0 +1,22 @@
+name: ShortcutBridge
+options:
+  bundleIdPrefix: com.nathandave
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  ShortcutBridge:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nathandave.shortcutbridge
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Shortcut Bridge
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Shortcut Bridge utilise votre position pour rechercher les arrêts de transport à proximité."
+        TARGETED_DEVICE_FAMILY: "1"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_ALLOWED: NO
+        SUPPORTS_MACCATALYST: NO
