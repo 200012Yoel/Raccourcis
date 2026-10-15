@@ -16,10 +16,10 @@ struct NextTransportIntent: AppIntent {
         Summary("Prochains passages de la ligne \(\.$line) à \(\.$stopName)")
     }
 
-    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
         guard let key = APIKeyStore.read() else { throw IDFMError.missingKey }
         let output = try await IDFMService.searchLine(line, stopName: stopName, key: key)
-        return .result(value: output, dialog: IntentDialog(stringLiteral: output))
+        return .result(value: output)
     }
 }
 
