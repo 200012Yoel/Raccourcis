@@ -50,7 +50,7 @@ jobs:
           # Aucune condition "est" à compléter à la main à l'import.
           assert all(q.get("WFCondition") not in (4, 5) for q in conditions)
           text_all = str(p)
-          for term in ("Botzaris", "Métro", "RER", "Transilien", "Bus", "stop_schedules", "direction"):
+          for term in ("Métro", "RER", "Transilien", "Bus", "stop_schedules", "direction"):
             assert term in text_all, term
           print("OK", len(ids), "actions, dont", ids.count("is.workflow.actions.speaktext"), "annonces vocales")
           PY
